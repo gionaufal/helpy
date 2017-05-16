@@ -84,15 +84,37 @@ module API
           optional :team_list, type: String, desc: "The group that this ticket is assigned to"
           optional :channel, type: String, desc: "The source channel the ticket was created from, Defaults to API if no value provided."
           optional :kind, type: String, desc: "he kind of topic this is, can be 'ticket','discussion','chat', etc."
-          requires :user_id, type: Integer, desc: "the User ID"
+          optional :user_id, type: Integer, desc: "the User ID"
+          optional :user_email, type: String, desc: "The User email, if the user is not created yet"
           optional :tag_list, type: String, desc: "A list of tags to apply to this ticket"
+        end
+
+        # if params[:user_id].nil?
+        #   create_user
+        # end
+
+        def create_user
+          # create user
+          @user = User.new
+
+          @token, enc = Devise.token_generator.generate(User, :reset_password_token)
+          @user.reset_password_token = enc
+          @user.reset_password_sent_at = Time.now.utc
+
+          @user.email = params[:user_email]
+          @user.name = @email.from[:name].blank? ? @email.from[:token].gsub(/[^a-zA-Z]/, '') : @email.from[:name]
+          @user.password = User.create_password
+          if @user.save
+            UserMailer.new_user(@user.id, @token).deliver_later
+          end
+          @user
         end
 
         post "", root: :topics do
           ticket = Topic.create!(
             forum_id: 1,
             name: params[:name],
-            user_id: params[:user_id],
+            user_id: params[:user_id] || create_user.id,
             current_status: 'new',
             private: true,
             team_list: params[:team_list],
@@ -102,7 +124,7 @@ module API
           )
           ticket.posts.create!(
             body: params[:body],
-            user_id: params[:user_id],
+            user_id: params[:user_id] || create_user.id,
             kind: 'first',
           )
           present ticket, with: Entity::Topic, posts: true

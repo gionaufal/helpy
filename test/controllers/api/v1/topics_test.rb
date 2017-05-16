@@ -154,6 +154,29 @@ class API::V1::TopicsTest < ActiveSupport::TestCase
     assert_equal 2, object['tag_list'].count
   end
 
+  test "an API user should be able to create a ticket with e-mail" do
+    email = 'some@email.com'
+
+    params = {
+      name: "Got a problem",
+      body: "This is some really profound question",
+      user_email: email,
+      tag_list: 'tag1, tag2',
+    }
+
+    post '/api/v1/tickets.json', @default_params.merge(params)
+
+    object = JSON.parse(last_response.body)
+
+    assert_equal 1, object['forum_id']
+    assert object['name'] == "Got a problem"
+    assert object['posts'].count == 1
+    assert object['posts'][0]['body'] == "This is some really profound question"
+    assert_equal "api", object['channel']
+    assert_equal 2, object['tag_list'].count
+
+  end
+
   test "an API user should be able to assign a ticket" do
     user = User.find(1)
     ticket = Topic.find(2)
