@@ -10,9 +10,33 @@ module API
       include API::V1::Defaults
       include Grape::Kaminari
 
+      helpers do
+        def find_or_create_user
+          User.find_by(email: params[:user_email]) || create_user
+        end
+
+        def create_user
+          @user = User.new
+          @email = params[:user_email]
+
+          @token, enc = Devise.token_generator.generate(User, :reset_password_token)
+          @user.reset_password_token = enc
+          @user.reset_password_sent_at = Time.now.utc
+
+          @user.email = @email
+          @user.name = @email
+          @user.password = User.create_password
+          if @user.save
+            UserMailer.new_user(@user.id, @token).deliver_later
+            @user
+          end
+        end
+      end
+
       # throttle max: 200, per: 1.minute
 
       # PRIVATE TICKET ENDPOINTS
+
       resource :tickets, desc: "Create and Manage private discussions" do
 
         paginate per_page: 20
@@ -93,7 +117,7 @@ module API
           ticket = Topic.create!(
             forum_id: 1,
             name: params[:name],
-            user_id: params[:user_id] || ::TicketsFromEmail.new(params[:email]).id,
+            user_id: params[:user_id] || find_or_create_user.id,
             current_status: 'new',
             private: true,
             team_list: params[:team_list],
@@ -103,7 +127,7 @@ module API
           )
           ticket.posts.create!(
             body: params[:body],
-            user_id: params[:user_id] || ::TicketsFromEmail.new(params[:email]).id,
+            user_id: params[:user_id] || find_or_create_user.id,
             kind: 'first',
           )
           present ticket, with: Entity::Topic, posts: true
